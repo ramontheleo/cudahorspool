@@ -1,6 +1,6 @@
 /*
- Copyright 2010. All rights reserved
- Author: Raymond Tay
+ Copyright 2015. All rights reserved
+ Author: Teh Rong Jiunn
  version: 1.0
 */
 
