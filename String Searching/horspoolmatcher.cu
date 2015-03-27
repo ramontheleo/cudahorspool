@@ -18,7 +18,6 @@
 #define ASIZE 255	//ASCII code size
 #define DATA_SIZE 1024000
 #define YES 1
-#define NO 0
 
 using namespace std;
 
@@ -39,12 +38,12 @@ __global__ void stringSearchKernel(char *pattern, int m, char* text, int n, int 
 	//
 	// Copy text from global memory to shared memory
 	//
-	int block = blockIdx.x * (textPerBlock - m + 1);
+	int blockStart = blockIdx.x * (textPerBlock - m + 1);
 	for (int i = 0; i < textPerThread - m + 1; i++)
 	{	
-		int sLocation = blockDim.x * i + threadIdx.x; //index into shared memory
+		int sLocation = blockDim.x * i + threadIdx.x; //shared memory location
 		if(sLocation >= textPerBlock) break;
-		int gLocation = block + blockDim.x * i + threadIdx.x; //index into global memory
+		int gLocation = blockStart + blockDim.x * i + threadIdx.x; //global memory location
 		if(gLocation >= n) break;
 		blockText[sLocation] = text[gLocation];
 	}
@@ -53,20 +52,23 @@ __global__ void stringSearchKernel(char *pattern, int m, char* text, int n, int 
 	//
 	// Matching pattern with block text
 	//
-	int thread = threadIdx.x * (textPerThread - m + 1); 
-	int tLocation = thread; //index into text
-	int pLocation = m - 1; //index into pattern
-	
-	while (tLocation + pLocation < thread + textPerThread){
-		int k = pLocation;
-		while (pattern[k] == blockText[tLocation + k]) k -= 1;
-		if (k < 0){
-				results[tLocation] = YES;
-				break;
+	int threadStart = threadIdx.x * (textPerThread - m + 1);
+	int tLocation = threadStart; //text location
+	int pLocation = m - 1; //pattern location
+
+	if(tLocation + pLocation < textPerBlock){ //skip if exceeds block size
+		while(tLocation + pLocation < threadStart + textPerThread){ //matching within thread size
+			int k = pLocation;
+			while (pattern[k] == blockText[tLocation + k]){
+				k -= 1;
+				if (k < 0){
+					results[blockStart + tLocation] = YES;
+					break;
+				}
+			}
+			tLocation += shifts[blockText[tLocation + k]];		
 		}
-		else tLocation += shifts[blockText[tLocation + k]];
-	}
-	
+	}	
 	__syncthreads();
 
 	return;
@@ -224,11 +226,16 @@ char* readfile(const char* filename) {
 
 void displayResults(int n, int  results[]) {
 	int noMatch = 0;
+	int total = 0;
 	for (int i = 0; i < n; i++){
-		if (results[i] == YES) printf("Found match at %d.\n", i);
+		if (results[i] == YES){
+			printf("Found match at %d.\n", i);
+			total += 1;
+		}
 		else noMatch++;
 	}
 	if (noMatch == n) printf("No match found.\n");
+	else printf("Total occurrence: %d\n",total);
 }
 
 int main() {
